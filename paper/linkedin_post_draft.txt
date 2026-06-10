@@ -1,0 +1,41 @@
+LINKEDIN POST DRAFT v2 - no story arc, artifact-first
+=====================================================
+
+I machine-checked RSA, the encryption math behind most payments and
+logins since the 70s - from absolute zero, in Lean 4.
+
+196 lemmas across 12 tiers, starting at 0 + n = n and building through
+Fermat's Little Theorem and the Chinese Remainder Theorem to the capstone:
+a computer-verified proof that RSA decryption always recovers the original
+message. The identity every RSA implementation on earth silently relies on.
+
+No Mathlib. No external dependencies. Every brick in the tower is in the
+repo and checked in a single build.
+
+The image is the actual dependency graph - every dot a proven lemma, every
+line one proof resting on another. The gold star is rsa_correctness.
+
+You don't have to trust any of this, which is the point:
+
+  git clone github.com/adventurelands/rsa-correctness-lean4
+  lake build          -> the computer re-checks all 196 proofs
+  grep -rn sorry      -> zero (Lean's "I gave up" keyword)
+
+Scope, honestly: this proves textbook-RSA correctness, not implementation
+security - padding, key generation, and side channels are a different war.
+RSA has been formalized before in Coq/Isabelle/Lean+Mathlib; the point here
+is zero dependencies, all the way down.
+
+This is my first formal verification project that I'm putting in public -
+feedback, edit suggestions, and harder questions are genuinely welcome,
+especially from people who do this professionally.
+
+Repo: github.com/adventurelands/rsa-correctness-lean4
+
+---------------------------------------------------------
+VISUAL: attach paper/proof_tower.png (now also in the README), or the
+30-sec screen recording (grep sorry -> lake build green -> capstone scroll
+-> tower image). Video likely outperforms the still.
+
+PRE-FLIGHT: git push -> flip repo Public -> confirm README + image render
+on github.com -> post.

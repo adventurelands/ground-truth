@@ -1,0 +1,170 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{hyperref}
+\usepackage{booktabs}
+\usepackage{enumitem}
+
+\newtheorem{theorem}{Theorem}
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{definition}[theorem]{Definition}
+
+\title{\textbf{Ground Truth: RSA Correctness from First Principles\\in Pure Lean 4 Without Mathlib}}
+\author{Davis Brief\\\texttt{davis@team8.co}}
+\date{April 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+We present a complete, machine-checked proof of RSA encryption correctness in the Lean 4 proof assistant, built entirely from first principles without any dependency on the Mathlib library. The development comprises 196 lemmas organized across 12 tiers, beginning with basic natural number arithmetic ($0 + n = n$) and culminating in the theorem that RSA decryption inverts encryption ($m^{de} \equiv m \pmod{pq}$ for appropriate primes $p, q$ and exponents $d, e$). The proof chain passes through divisibility theory, the Euclidean algorithm, prime factorization, Fermat's Little Theorem (proved via binomial coefficients), B\'{e}zout's identity, and the Chinese Remainder Theorem. The entire development compiles with zero \texttt{sorry} axioms and depends only on Lean's three core axioms (\texttt{propext}, \texttt{Quot.sound}, \texttt{Classical.choice}). To our knowledge, this is the first standalone formalization of RSA correctness in Lean 4 without Mathlib. The proof artifact is publicly verifiable: any user can clone the repository and confirm correctness by running \texttt{lake build}.
+\end{abstract}
+
+\section{Introduction}
+
+RSA~\cite{rsa1978} is the most widely deployed public-key cryptosystem in the world. Its correctness relies on a chain of number-theoretic results stretching from basic arithmetic through Fermat's Little Theorem and the Chinese Remainder Theorem. While these results are well-known and have been formalized in various proof assistants (notably in Mathlib for Lean 4~\cite{mathlib}, and in Coq, Isabelle/HOL, and others), every existing Lean 4 formalization depends on the Mathlib library, a 1.5-million-line dependency that, while powerful, obscures the logical structure of the proof.
+
+We present \textbf{Ground Truth}, a self-contained formalization of RSA correctness in 2,553 lines of pure Lean 4 code with zero external dependencies beyond the language's standard library. The development is organized as a linear chain of 12 ``tiers,'' each importing only its predecessor, so that the logical dependency structure is immediately apparent.
+
+Our contributions are:
+\begin{enumerate}[leftmargin=*]
+    \item A complete, dependency-free proof of RSA correctness in Lean 4, comprising 196 machine-checked lemmas with zero \texttt{sorry}.
+    \item A proof of Fermat's Little Theorem from scratch, via binomial coefficients and the ``freshman's dream'' identity, without any finite field or group theory machinery.
+    \item A constructive proof of B\'{e}zout's identity and the existence of modular inverses, using an integer-valued extended GCD.
+    \item A demonstration that a small LLM (Gemma 4 E4B, 4.5B parameters; DeepSeek-Prover-V2 7B) can contribute meaningfully to formal proof development when paired with Lean's type-checker as an oracle.
+\end{enumerate}
+
+\section{Architecture}
+
+The proof is organized into 12 tiers, each building strictly on the previous:
+
+\begin{table}[h]
+\centering
+\begin{tabular}{@{}clcc@{}}
+\toprule
+\textbf{Tier} & \textbf{Topic} & \textbf{Lemmas} & \textbf{Key Result} \\
+\midrule
+1  & Natural number basics     & 20 & $a + b = b + a$ \\
+2  & Ordering                  & 20 & Trichotomy \\
+3  & Division \& modular arithmetic & 19 & $a = b \cdot \lfloor a/b \rfloor + a \bmod b$ \\
+4  & Divisibility              & 19 & $d \mid a \wedge d \mid b \Rightarrow d \mid (a+b)$ \\
+5  & Lists \& structural induction & 19 & $|l_1 \mathbin{++} l_2| = |l_1| + |l_2|$ \\
+6  & GCD \& coprimality        & 18 & Euclid's lemma for coprime pairs \\
+7  & Primes                    & 14 & $\exists$ infinitely many primes \\
+8  & Fermat's Little Theorem   & 27 & $a^p \equiv a \pmod{p}$ \\
+9  & B\'{e}zout \& modular inverse & 12 & $\gcd(a,n)=1 \Rightarrow \exists b.\; ab \equiv 1 \pmod{n}$ \\
+10 & Chinese Remainder Theorem & 12 & CRT existence \& uniqueness \\
+11 & Fermat-to-RSA bridge      & 10 & $m^{de} \equiv m \pmod{p}$ \\
+12 & RSA correctness           &  6 & $m^{de} \equiv m \pmod{pq}$ \\
+\midrule
+   & \textbf{Total}            & \textbf{196} & \\
+\bottomrule
+\end{tabular}
+\caption{Proof chain from basic arithmetic to RSA correctness.}
+\label{tab:tiers}
+\end{table}
+
+Each tier is a single Lean 4 file. Every lemma carries a plain-English comment explaining what it proves, making the development accessible to non-experts.
+
+\section{Key Proofs}
+
+\subsection{Fermat's Little Theorem (Tier 8)}
+
+The proof of $a^p \equiv a \pmod{p}$ for prime $p$ proceeds in three stages:
+
+\paragraph{Stage 1: Binomial coefficient infrastructure.} We define binomial coefficients via Pascal's triangle:
+\[
+C(n, 0) = 1, \quad C(0, k+1) = 0, \quad C(n+1, k+1) = C(n,k) + C(n, k+1)
+\]
+and prove the product identity $C(n,k) \cdot k! \cdot (n-k)! = n!$ by induction on $n$, with a case split on whether $k < n$ or $k = n$.
+
+\paragraph{Stage 2: Prime divides middle binomial coefficients.} Using the product identity and the fact that $p$ does not divide $k!$ or $(p-k)!$ for $0 < k < p$ (proved by showing a prime cannot divide a factorial of smaller numbers), we establish:
+\[
+0 < k < p \implies p \mid C(p, k)
+\]
+
+\paragraph{Stage 3: Freshman's dream and induction.} We define a partial binomial sum $\text{binomSum}(a, n, j) = \sum_{i=0}^{j-1} C(n,i) \cdot a^i$, prove the binomial theorem $(a+1)^n = \text{binomSum}(a, n, n)$, and show that all middle terms vanish mod $p$. This yields the ``freshman's dream'':
+\[
+(a+1)^p \equiv a^p + 1 \pmod{p}
+\]
+Fermat's Little Theorem then follows by induction on $a$.
+
+\subsection{Chinese Remainder Theorem (Tier 10)}
+
+The CRT proof is constructive: given coprime $m, n$ and target remainders $r_1, r_2$, we compute modular inverses of $n \bmod m$ and $m \bmod n$ (via B\'{e}zout's identity from Tier 9), then construct the explicit solution $x = r_1 \cdot n \cdot n^{-1} + r_2 \cdot m \cdot m^{-1} \pmod{mn}$.
+
+Uniqueness follows from the key lemma: if $a \equiv b \pmod{m}$ and $a \equiv b \pmod{n}$ with $\gcd(m,n) = 1$, then $mn \mid (a - b)$, hence $a \equiv b \pmod{mn}$.
+
+\subsection{RSA Correctness (Tier 12)}
+
+The capstone theorem states: for distinct primes $p, q$, if $de \equiv 1 \pmod{(p-1)(q-1)}$, then
+\[
+m^{de} \equiv m \pmod{pq}
+\]
+
+The proof proceeds in three steps:
+\begin{enumerate}
+    \item \textbf{Mod $p$}: Case split on whether $p \mid m$. If yes, both sides are $0 \bmod p$. If no, apply the multiplicative form of Fermat's Little Theorem: $m^{de} = m \cdot m^{k(p-1)(q-1)} \equiv m \cdot 1 \equiv m \pmod{p}$.
+    \item \textbf{Mod $q$}: Symmetric argument.
+    \item \textbf{Combine via CRT}: Since $\gcd(p,q) = 1$ (distinct primes are coprime), the Chinese Remainder Theorem yields $m^{de} \equiv m \pmod{pq}$.
+\end{enumerate}
+
+\section{Proof Methodology}
+
+The development was produced through a human-AI collaboration over a single session. The workflow:
+
+\begin{enumerate}[leftmargin=*]
+    \item \textbf{Scaffolding}: All 196 theorem statements were written by hand with \texttt{sorry} placeholders and verified to compile.
+    \item \textbf{Automated tactics}: A Python orchestrator (\texttt{proof\_farm.py}) tested each lemma against a battery of 40+ tactic combinations (\texttt{omega}, \texttt{simp}, \texttt{induction}, \texttt{cases}, etc.). This solved approximately 60\% of lemmas instantly.
+    \item \textbf{LLM-assisted proving}: Lemmas that resisted automated tactics were sent to Gemma 4 E4B (4.5B parameters) and DeepSeek-Prover-V2 (7B parameters) running on a local RTX 2060. Lean's type-checker served as the oracle; candidates were accepted only if they compiled.
+    \item \textbf{Human intervention}: Hard lemmas (Fermat's Little Theorem, B\'{e}zout's identity, CRT, prime existence) were proved by the human author with AI assistance for tactic suggestions and arithmetic rearrangements.
+\end{enumerate}
+
+DeepSeek-Prover-V2 proved several lemmas on first attempt (e.g., \texttt{mod\_lt} via \texttt{exact Nat.mod\_lt \_ hb}), while Gemma 4 E4B contributed primarily through trial-and-error on simple arithmetic goals. Neither model could handle proofs requiring novel multi-step reasoning about custom definitions.
+
+\section{Axioms and Trust Base}
+
+The development depends on exactly three axioms, all part of Lean 4's core:
+\begin{itemize}
+    \item \texttt{propext}: Propositional extensionality
+    \item \texttt{Quot.sound}: Quotient soundness
+    \item \texttt{Classical.choice}: The axiom of choice (used via \texttt{by\_cases} for decidability)
+\end{itemize}
+
+No custom axioms are introduced. The \texttt{sorry} count across all 12 tier files is exactly zero.
+
+\section{Related Work}
+
+RSA correctness has been formalized in several proof assistants:
+\begin{itemize}
+    \item \textbf{Coq}: Bertot and Cast\'{e}ran~\cite{bertot2004} include RSA as an exercise in \textit{Interactive Theorem Proving and Program Development}.
+    \item \textbf{Isabelle/HOL}: The AFP contains formalizations of RSA-related number theory.
+    \item \textbf{Lean 4 + Mathlib}: Mathlib's \texttt{ZMod} module provides the infrastructure for RSA, but no standalone proof exists.
+\end{itemize}
+
+To our knowledge, Ground Truth is the first formalization of RSA correctness in Lean 4 that does not depend on Mathlib or any external library.
+
+\section{Conclusion}
+
+We have demonstrated that a complete, machine-checked proof of RSA correctness can be built from first principles in 2,553 lines of pure Lean 4, organized as a readable 12-tier chain from $0 + n = n$ to $\text{decrypt}(\text{encrypt}(m)) = m$. The development is self-contained, dependency-free, and publicly verifiable.
+
+The proof artifact is available at: \texttt{[repository URL upon publication]}
+
+\begin{thebibliography}{9}
+\bibitem{rsa1978}
+R.~Rivest, A.~Shamir, and L.~Adleman.
+\newblock A method for obtaining digital signatures and public-key cryptosystems.
+\newblock \textit{Communications of the ACM}, 21(2):120--126, 1978.
+
+\bibitem{mathlib}
+The mathlib Community.
+\newblock The {L}ean mathematical library.
+\newblock In \textit{CPP 2020}, pages 367--381, 2020.
+
+\bibitem{bertot2004}
+Y.~Bertot and P.~Cast\'{e}ran.
+\newblock \textit{Interactive Theorem Proving and Program Development: Coq'Art}.
+\newblock Springer, 2004.
+\end{thebibliography}
+
+\end{document}
